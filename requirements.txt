@@ -1,0 +1,9 @@
+pandas
+sqlite3
+scikit-learn
+seaborn
+matplotlib
+fastapi
+uvicorn
+streamlit
+requests
