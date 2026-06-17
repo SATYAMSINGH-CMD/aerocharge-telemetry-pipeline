@@ -6,44 +6,41 @@ from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 
-# Config configured for full-width structural layout
+# Page configuration optimized for a clean, professional dashboard view
 st.set_page_config(page_title="Drone Telemetry Analyzer", layout="wide")
 
 # ==========================================
-# CUSTOM CSS: LIGHT CRUNCH THEME WITH FIXES
+# STYLING SHEET: CLEAN LIGHT THEME
 # ==========================================
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
     
-    /* Clean up standard Streamlit layout borders */
+    /* Remove standard Streamlit structural distractions */
     span[data-testid="stSidebarCollapseButton"], 
     div[data-testid="collapsedControl"],
     header[data-testid="stHeader"] {
         display: none !important;
     }
     
-    /* Base Application Background */
     .stApp {
         background-color: #ffffff;
         color: #2d2d2d;
         font-family: 'Inter', sans-serif;
     }
     
-    /* Force all slider labels to deep slate gray */
+    /* Focus typography strictly on industry-standard slates */
     label, [data-testid="stWidgetLabel"] p {
         color: #1a2238 !important;
         font-family: 'IBM Plex Mono', monospace !important;
         font-weight: 500 !important;
         font-size: 0.85rem !important;
     }
-    
-    /* Standard font overrides */
     h1, h2, h3, h4, .mono-text {
         font-family: 'IBM Plex Mono', monospace !important;
     }
     
-    /* Full-width Top Banner */
+    /* Top Header Banner Component */
     .hero-header {
         background-color: #1a2238;
         color: #ffffff;
@@ -67,7 +64,7 @@ st.markdown("""
         margin: 0 auto;
     }
     
-    /* Structured component cards */
+    /* Metric Display Cards */
     .metric-card {
         background-color: #f8f9fa;
         border: 1px solid #e9ecef;
@@ -104,7 +101,6 @@ st.markdown("""
         transition: width 0.4s ease;
     }
     
-    /* Diagnostics HUD row layouts */
     .status-row {
         display: flex;
         justify-content: space-between;
@@ -120,16 +116,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# MULTI-VARIABLE MACHINE LEARNING ENGINE
+# DATA LOADING & MODEL TRAINING
 # ==========================================
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
 
 @st.cache_resource
-def initialize_multi_model_pipeline():
+def train_telemetry_models():
+    """Loads historical logs and trains estimators for independent subsystems."""
     np.random.seed(42)
     n_samples = 1000
     
+    # Check if real historical data rows exist inside the SQLite data layer
     if DB_PATH.exists():
         conn = sqlite3.connect(DB_PATH)
         df = pd.read_sql_query("""
@@ -143,12 +141,13 @@ def initialize_multi_model_pipeline():
         wind = df['avg_wind_speed'].values
         v_drop = df['voltage_drop_rate'].values
     else:
+        # Fallback simulator using physics-approximated bounds
         rpm = np.random.randint(10000, 17000, size=n_samples)
         weight = np.random.uniform(0.5, 6.0, size=n_samples)
         wind = np.random.uniform(2.0, 35.0, size=n_samples)
-        v_drop = np.random.uniform(0.001, 0.012, size=n_samples)  # Adjusted base training vector scales
+        v_drop = np.random.uniform(0.001, 0.012, size=n_samples)
 
-    # Relational formulas to map physical target vectors
+    # Simplified engineering relationships for secondary mechanical factors
     temp = 25.0 + (rpm * 0.003) + (weight * 4.5) + np.random.normal(0, 2, size=len(rpm))
     vib = 0.2 + (wind * 0.04) + (rpm * 0.00005) + np.random.normal(0, 0.05, size=len(rpm))
     drag = (wind ** 2) * 0.008 * (1.0 + (weight * 0.05)) + np.random.normal(0, 0.1, size=len(rpm))
@@ -161,6 +160,7 @@ def initialize_multi_model_pipeline():
     features = ['rpm', 'weight', 'wind']
     models_dict = {}
     
+    # Train independent sub-models
     for target in ['v_drop', 'temp', 'vib', 'drag']:
         X = data_payload[features]
         y = data_payload[target]
@@ -171,31 +171,31 @@ def initialize_multi_model_pipeline():
         
     return models_dict
 
-models = initialize_multi_model_pipeline()
+models = train_telemetry_models()
 
 # ==========================================
-# VISUAL HERO HEADER BANNER
+# DASHBOARD HEADER BANNER
 # ==========================================
 st.markdown("""
     <div class='hero-header'>
         <div class='hero-title'>DRONE TELEMETRY ANALYZER</div>
-        <div class='hero-subtitle'>Multi-subsystem flight analysis engine evaluating airframe performance curves from core relational logs.</div>
+        <div class='hero-subtitle'>Predictive flight analytics engine evaluating multi-subsystem airframe performance curves.</div>
     </div>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# THREE COLUMN COMPONENT MAIN LAYOUT
+# THREE COLUMN MAIN LAYOUT GRID
 # ==========================================
 col_input, col_metrics, col_hud = st.columns([25, 45, 30], gap="large")
 
-# COLUMN 1: FLIGHT SETTINGS INPUT PANEL (LEFT)
+# --- PANEL 1: INPUTS (LEFT) ---
 with col_input:
-    st.markdown("<h4 style='color: #1a2238; border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1.5rem;'>Flight Inputs</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color: #1a2238; border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1.5rem;'>Inputs</h4>", unsafe_allow_html=True)
     input_rpm = st.slider("Motor RPM", 8000, 18000, 14000, 100)
     input_weight = st.slider("Payload Weight (kg)", 0.5, 8.0, 2.5, 0.05)
     input_wind = st.slider("Average Wind Speed (km/h)", 0.0, 45.0, 15.0, 0.25)
 
-# Calculate simultaneous multi-variable inference
+# Calculate simultaneous inference outputs
 eval_vector = [[input_rpm, input_weight, input_wind]]
 raw_v_pred = models['v_drop'].predict(eval_vector)[0]
 
@@ -205,7 +205,7 @@ pred_t = models['temp'].predict(eval_vector)[0]
 pred_vi = models['vib'].predict(eval_vector)[0]
 pred_d = models['drag'].predict(eval_vector)[0]
 
-# COLUMN 2: EXPANDED DIAGNOSTICS READOUTS (CENTER)
+# --- PANEL 2: SUBSYSTEM DIAGNOSTICS (CENTER) ---
 with col_metrics:
     st.markdown("<h4 style='color: #1a2238; border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1.5rem;'>Subsystem Diagnostics</h4>", unsafe_allow_html=True)
     
@@ -223,23 +223,23 @@ with col_metrics:
     fill_t = min(100, max(5, int((pred_t / 100) * 100)))
     st.markdown(f"""
         <div class='metric-card'>
-            <div class='metric-label'>Estimated Motor Temperature</div>
+            <div class='metric-label'>Motor Temperature</div>
             <div class='metric-value'>{pred_t:.1f} <span style='font-size: 14px; color:#6c757d;'>°C</span></div>
             <div class='bar-wrapper'><div class='bar-fill' style='width: {fill_t}%;'></div></div>
         </div>
     """, unsafe_allow_html=True)
     
-    # Block 3: Vibration Amplitude
+    # Block 3: Vibration Level
     fill_vi = min(100, max(5, int((pred_vi / 3.0) * 100)))
     st.markdown(f"""
         <div class='metric-card'>
-            <div class='metric-label'>Vibration Amplitude Vector</div>
+            <div class='metric-label'>Vibration Amplitude</div>
             <div class='metric-value'>{pred_vi:.2f} <span style='font-size: 14px; color:#6c757d;'>g-force</span></div>
             <div class='bar-wrapper'><div class='bar-fill' style='width: {fill_vi}%;'></div></div>
         </div>
     """, unsafe_allow_html=True)
 
-# COLUMN 3: OVERALL SYSTEM STATUS & SPECS (RIGHT)
+# --- PANEL 3: STATUS & FORECASTS (RIGHT) ---
 with col_hud:
     st.markdown("<h4 style='color: #1a2238; border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1.5rem;'>System Status</h4>", unsafe_allow_html=True)
     
@@ -255,11 +255,11 @@ with col_hud:
         </div>
     """, unsafe_allow_html=True)
     
-    # Cleaned 10-Minute Trend Line Plot capped at nominal safety boundaries
+    # 10-Minute Trend Line Plot capped at absolute discharge floors
     st.markdown("<br><div style='font-size:0.75rem; font-weight:600; color:#6c757d; text-transform:uppercase;'>10-Min Voltage Decay Forecast</div>", unsafe_allow_html=True)
     time_steps = np.arange(0, 601, 30)
     
-    # Calculate decay vectors and clip values cleanly at absolute zero discharge limits (18.0V)
+    # Clip values cleanly at floor safety boundaries (18.0V for a 6S Pack)
     voltage_line = np.maximum(18.0, 22.20 - (pred_v * time_steps))
     
     chart_data = pd.DataFrame({
