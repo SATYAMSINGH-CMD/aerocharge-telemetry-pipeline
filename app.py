@@ -2,7 +2,6 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import numpy as np
-import time
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
@@ -13,7 +12,7 @@ from sklearn.ensemble import RandomForestRegressor
 st.set_page_config(
     page_title="Drone Telemetry Analyzer // HUD", 
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"  # Changed from collapsed to clear the top-left text glitch
 )
 
 # Deep aerospace dark theme injection (#0a0e1a) with custom monospace hierarchies
@@ -45,12 +44,7 @@ st.markdown("""
         font-size: 1.1rem !important;
         text-transform: uppercase;
         letter-spacing: 1px;
-        margin-bottom: 1.5rem !important;
-    }
-    
-    /* Dashboard Cards / Containers */
-    div[data-testid="stVerticalBlock"] > div {
-        background: rgba(10, 14, 26, 0.7);
+        margin-bottom: 1.2rem !important;
     }
     
     /* Custom HUD Metric Styles */
@@ -114,7 +108,6 @@ DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
 @st.cache_resource
 def load_data_and_train():
     if not DB_PATH.exists():
-        # Fallback dataset emulation layer
         np.random.seed(42)
         n_samples = 1500
         mock_data = pd.DataFrame({
@@ -150,30 +143,34 @@ def load_data_and_train():
 model, validation_r2 = load_data_and_train()
 
 # ==========================================
-# TOP TELEMETRY HEADER BAR
+# SIDEBAR CONTROLS (FLIGHT PARAMETERS)
+# ==========================================
+with st.sidebar:
+    st.markdown("<h3 style='color: #00d4ff;'>Flight Parameters</h3>", unsafe_allow_html=True)
+    st.write("Adjust mechanical variables to simulate drone telemetry changes:")
+    st.markdown("---")
+    
+    input_rpm = st.slider("Motor RPM", min_value=8000, max_value=18000, value=14000, step=50)
+    input_weight = st.slider("Payload Weight (kg)", min_value=0.5, max_value=8.0, value=2.5, step=0.05)
+    input_wind = st.slider("Average Wind Speed (km/h)", min_value=0.0, max_value=45.0, value=15.0, step=0.25)
+
+# Calculate live estimation values based on input
+features = [[input_rpm, input_weight, input_wind]]
+predicted_rate = model.predict(features)[0]
+
+# Dynamic header stats
+is_airborne = "AIRBORNE" if input_rpm > 9500 else "GROUNDED"
+badge_color = "#00d4ff" if is_airborne == "AIRBORNE" else "#ef4444"
+estimated_battery = max(0.0, min(100.0, 100.0 - (predicted_rate * 600)))
+
+# ==========================================
+# MAIN PANEL NAVIGATION HEADER
 # ==========================================
 header_col1, header_col2, header_col3, header_col4 = st.columns([40, 20, 20, 20])
 
 with header_col1:
     st.markdown("<h1 style='margin:0; padding:0;'>DRONE TELEMETRY ANALYZER</h1>", unsafe_allow_html=True)
-    st.caption("SYSTEM CORE: RANDOM FOREST REGRESSOR // TELEMETRY DATA SINK")
-
-# Temporary controls to calculate header variables dynamically below
-# We instantiate them early to allow the header block to catch values
-with st.sidebar:
-    st.markdown("### SYSTEM CONTROLS override")
-    input_rpm = st.slider("Motor RPM Input Value", 8000, 18000, 14000, 50)
-    input_weight = st.slider("Payload Weight Value", 0.5, 8.0, 2.5, 0.05)
-    input_wind = st.slider("Wind Speed Value", 0.0, 45.0, 15.0, 0.25)
-
-# Calculate live estimation values
-features = [[input_rpm, input_weight, input_wind]]
-predicted_rate = model.predict(features)[0]
-
-# Derive conditional telemetry stats
-is_airborne = "AIRBORNE" if input_rpm > 9500 else "GROUNDED"
-badge_color = "#00d4ff" if is_airborne == "AIRBORNE" else "#ef4444"
-estimated_battery = max(0.0, min(100.0, 100.0 - (predicted_rate * 600)))  # Estimate remaining capacity after 10 min flight
+    st.caption("SYSTEM CORE: RANDOM FOREST REGRESSOR // DATA SINK")
 
 with header_col2:
     st.markdown(f"""
@@ -202,36 +199,16 @@ with header_col4:
 st.markdown("<hr style='border: 0; border-top: 1px solid rgba(0, 212, 255, 0.2); margin-top:0.5rem; margin-bottom:1.5rem;'>", unsafe_allow_html=True)
 
 # ==========================================
-# MAIN CONTROL ROOM LAYOUT MATRIX
+# CORE LAYOUT DATA MATRIX
 # ==========================================
-col_left, col_right = st.columns(2, gap="large")
+col_diag, col_charts = st.columns(2, gap="large")
 
-with col_left:
-    st.markdown("<h3>Flight Parameters</h3>", unsafe_allow_html=True)
-    
-    # Styled text info blocks substituting native labels to fit Monospace themes
-    st.markdown("<div style='font-size:0.85rem; color:#64748b; margin-bottom:-0.5rem;'>PROPULSION SUBSYSTEM (MIN: 8000 / MAX: 18000)</div>", unsafe_allow_html=True)
-    ui_rpm = st.slider("Motor RPM", min_value=8000, max_value=18000, value=input_rpm, step=50, label_visibility="collapsed")
-    
-    st.markdown("<div style='font-size:0.85rem; color:#64748b; margin-bottom:-0.5rem; margin-top:1rem;'>PAYLOAD CONFIGURATION MASS (MIN: 0.5 / MAX: 8.0)</div>", unsafe_allow_html=True)
-    ui_weight = st.slider("Payload Weight (kg)", min_value=0.5, max_value=8.0, value=input_weight, step=0.05, label_visibility="collapsed")
-    
-    st.markdown("<div style='font-size:0.85rem; color:#64748b; margin-bottom:-0.5rem; margin-top:1rem;'>ENVIRONMENTAL TURBULENCE VECTOR (MIN: 0.0 / MAX: 45.0)</div>", unsafe_allow_html=True)
-    ui_wind = st.slider("Average Wind Speed (km/h)", min_value=0.0, max_value=45.0, value=input_wind, step=0.25, label_visibility="collapsed")
-
-    # Sync variables if changed on the main screen array
-    if ui_rpm != input_rpm or ui_weight != input_weight or ui_wind != input_wind:
-        st.info("Re-aligning telemetry matrix...")
-        # Force redraw with synced state if needed via re-run triggers
-        
-    # --- FLIGHT HUD DIAGNOSTICS PANEL ---
-    st.markdown("<div style='margin-top:2.5rem;'></div>", unsafe_allow_html=True)
+with col_diag:
     st.markdown("<h3>Diagnostics Panel</h3>", unsafe_allow_html=True)
     
-    # Determine risk zones dynamically
-    rpm_status = ("CRIT", "status-crit") if ui_rpm > 16000 else (("WARN", "status-warn") if ui_rpm > 13500 else ("SAFE", "status-safe"))
-    load_status = ("CRIT", "status-crit") if ui_weight > 6.0 else (("WARN", "status-warn") if ui_weight > 4.0 else ("SAFE", "status-safe"))
-    wind_status = ("CRIT", "status-crit") if ui_wind > 32.0 else (("WARN", "status-warn") if ui_wind > 18.0 else ("SAFE", "status-safe"))
+    rpm_status = ("CRIT", "status-crit") if input_rpm > 16000 else (("WARN", "status-warn") if input_rpm > 13500 else ("SAFE", "status-safe"))
+    load_status = ("CRIT", "status-crit") if input_weight > 6.0 else (("WARN", "status-warn") if input_weight > 4.0 else ("SAFE", "status-safe"))
+    wind_status = ("CRIT", "status-crit") if input_wind > 32.0 else (("WARN", "status-warn") if input_wind > 18.0 else ("SAFE", "status-safe"))
     
     st.markdown(f"""
     <div style='border: 1px solid #1e293b; background: #070a14; padding: 1rem; border-radius: 4px;'>
@@ -250,12 +227,10 @@ with col_left:
     </div>
     """, unsafe_allow_html=True)
 
-with col_right:
+with col_charts:
     st.markdown("<h3>Prediction Results</h3>", unsafe_allow_html=True)
     
-    # SVG-driven Animated Arc Gauge Simulation representation via HTML string block
     gauge_color = "#10b981" if predicted_rate <= 0.040 else ("#f59e0b" if predicted_rate <= 0.060 else "#ef4444")
-    # Percentage to rotate or scale pointer tracker
     percentage_fill = min(100, max(10, int((predicted_rate / 0.1) * 100)))
     
     st.markdown(f"""
@@ -270,12 +245,9 @@ with col_right:
     </div>
     """, unsafe_allow_html=True)
 
-    # --- 10-MINUTE FLIGHT DEGRADATION SPARKLINE CHART ---
-    st.markdown("<div style='font-size:0.8rem; color:#64748b; margin-bottom:0.5rem;'>10-MINUTE VOLTAGE DEGRADATION TREND FORECAST</div>", unsafe_allow_html=True)
-    
-    # Constructing simulated decay curve array: V_t = V_0 - (drop_rate * t)
-    time_series = np.arange(0, 601, 30) # 10 minutes in 30 second steps
-    initial_voltage = 22.2 # Standard 6S LiPo Pack nominal index
+    # 10-Minute Sparkline Trend Plot
+    time_series = np.arange(0, 601, 30)
+    initial_voltage = 22.2
     voltage_decay = initial_voltage - (predicted_rate * time_series)
     
     chart_df = pd.DataFrame({
@@ -283,11 +255,10 @@ with col_right:
         'Estimated Pack Voltage (V)': voltage_decay
     }).set_index('Flight Timeline (Seconds)')
     
-    # Styled native Line Chart rendering dark grids directly onto the layout canvas
-    st.line_chart(chart_df, height=180)
+    st.line_chart(chart_df, height=200)
 
 # ==========================================
-# TERMINAL-STYLE MODEL DATA INSIGHTS CARD
+# SYSTEM METADATA TERMINAL
 # ==========================================
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown("---")
