@@ -7,109 +7,157 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 
 # ==========================================
-# PAGE ARCHITECTURE & THEME INJECTION
+# PAGE ARCHITECTURE & AUSTERE THEME INJECTION
 # ==========================================
 st.set_page_config(
-    page_title="Drone Telemetry Analyzer // HUD", 
+    page_title="Drone Telemetry Analyzer", 
     layout="wide",
-    initial_sidebar_state="expanded"  # Changed from collapsed to clear the top-left text glitch
+    initial_sidebar_state="collapsed"
 )
 
-# Deep aerospace dark theme injection (#0a0e1a) with custom monospace hierarchies
+# Injecting clean fonts (Inter and IBM Plex Mono) with a warm-neutral engineering color layout
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap');
     
-    /* Global Background Override */
+    /* Force hide standard Streamlit top layout elements and sidebar buttons */
+    span[data-testid="stSidebarCollapseButton"], 
+    div[data-testid="collapsedControl"],
+    header[data-testid="stHeader"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Core Typography Overrides */
     .stApp {
-        background-color: #0a0e1a;
-        background-image: radial-gradient(rgba(0, 212, 255, 0.05) 1px, transparent 0);
-        background-size: 24px 24px;
-        color: #94a3b8;
-        font-family: 'Roboto Mono', monospace;
+        background-color: #0f0f0d;
+        color: #a1a196;
+        font-family: 'Inter', sans-serif;
+    }
+    h1, h2, h3, h4, .mono-text, label, div[data-testid="stMetricValue"] {
+        font-family: 'IBM Plex Mono', monospace !important;
     }
     
-    /* Typography & Headers */
-    h1, h2, h3, h4, h5, h6, label, p, span, div {
-        font-family: 'Roboto Mono', monospace !important;
-    }
-    h1 {
-        color: #ffffff !important;
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-        letter-spacing: 1px;
-    }
-    h3 {
-        color: #00d4ff !important;
-        font-size: 1.1rem !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 1.2rem !important;
-    }
-    
-    /* Custom HUD Metric Styles */
-    .hud-container {
-        border: 1px solid rgba(0, 212, 255, 0.2);
-        padding: 1.5rem;
-        background: rgba(16, 24, 48, 0.8);
-        border-radius: 4px;
-        margin-bottom: 1rem;
-    }
-    .hud-value {
-        font-size: 2.2rem;
-        font-weight: 700;
-        color: #00d4ff;
-        text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
-    }
-    
-    /* Terminal Visualizations */
-    .terminal-card {
-        background-color: #05070f;
-        border: 1px solid #1e293b;
-        padding: 1.2rem;
-        border-radius: 4px;
-        color: #38bdf8;
-        font-size: 0.85rem;
-        line-height: 1.6;
-    }
-    .cursor {
-        display: inline-block;
-        width: 8px;
-        height: 15px;
-        background: #38bdf8;
-        animation: blink 1s infinite;
-        vertical-align: middle;
-        margin-left: 4px;
-    }
-    @keyframes blink {
-        0%, 49% { opacity: 1; }
-        50%, 100% { opacity: 0; }
-    }
-    
-    /* HUD Row Status Indicators */
-    .hud-row {
+    /* Header Container Configuration */
+    .thin-header {
         display: flex;
         justify-content: space-between;
-        padding: 0.5rem 0;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
+        align-items: center;
+        height: 48px;
+        border-bottom: 1px solid #1e1e1a;
+        padding: 0 1rem;
+        margin-bottom: 1.5rem;
     }
-    .status-safe { color: #10b981; font-weight: bold; }
-    .status-warn { color: #f59e0b; font-weight: bold; }
-    .status-crit { color: #ef4444; font-weight: bold; }
+    .header-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #e2e2dc;
+    }
+    .header-chips {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    .stat-chip {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+    }
+    .chip-label {
+        font-size: 0.65rem;
+        color: #6b6b5e;
+        text-transform: uppercase;
+    }
+    .chip-value {
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    .v-rule {
+        width: 1px;
+        height: 24px;
+        background-color: #1e1e1a;
+    }
+    
+    /* Three Column Layout Structural Wrappers */
+    .column-surface {
+        background-color: #161613;
+        border: 1px solid #1e1e1a;
+        padding: 1.25rem;
+        border-radius: 2px;
+        min-height: 520px;
+    }
+    .panel-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #6b6b5e;
+        text-transform: uppercase;
+        margin-bottom: 1.25rem;
+        border-bottom: 1px solid #1e1e1a;
+        padding-bottom: 0.5rem;
+    }
+    
+    /* Muted Segmented Linear Progress Bars */
+    .bar-value {
+        font-size: 32px;
+        font-weight: 500;
+        color: #c8a84b;
+        margin-bottom: 4px;
+    }
+    .segmented-container {
+        width: 100%;
+        height: 8px;
+        background: #1e1e1a;
+        position: relative;
+        border-radius: 1px;
+        overflow: hidden;
+    }
+    .segmented-fill {
+        height: 100%;
+        background-color: #c8a84b;
+        transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    /* Diagnostics Row Layout Configuration */
+    .diag-row {
+        padding: 0.75rem;
+        background-color: #0f0f0d;
+        border: 1px solid #1e1e1a;
+        border-left-width: 3px;
+        margin-bottom: 0.5rem;
+        font-size: 0.8rem;
+    }
+    .diag-label {
+        color: #6b6b5e;
+        margin-bottom: 2px;
+    }
+    .diag-value {
+        color: #e2e2dc;
+        font-weight: 500;
+    }
+    
+    /* Muted Status Colors */
+    .border-safe { border-left-color: #4a7c59 !important; }
+    .border-warn { border-left-color: #a07c3a !important; }
+    .border-crit { border-left-color: #8f3f3f !important; }
+    
+    /* Clean up native Streamlit sliders to align with warm-neutral palette */
+    div[data-baseweb="slider"] { background-color: transparent !important; }
+    div[data-testid="stSliderTickBar"] { display: none !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# CORE MACHINE LEARNING ENGINE
+# MACHINE LEARNING ENGINE (STABLE RE-LINK)
 # ==========================================
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
 
 @st.cache_resource
-def load_data_and_train():
+def run_model_training_pipeline():
     if not DB_PATH.exists():
+        # Clean local evaluation mock structure
         np.random.seed(42)
-        n_samples = 1500
+        n_samples = 1200
         mock_data = pd.DataFrame({
             'motor_rpm': np.random.randint(10000, 17000, size=n_samples),
             'package_weight_kg': np.random.uniform(0.5, 6.0, size=n_samples),
@@ -140,140 +188,142 @@ def load_data_and_train():
     r2_score = rf.score(X_test, y_test) * 100
     return rf, r2_score
 
-model, validation_r2 = load_data_and_train()
+model, validation_r2 = run_model_training_pipeline()
 
 # ==========================================
-# SIDEBAR CONTROLS (FLIGHT PARAMETERS)
+# AUSTERE 48PX TOP TELEMETRY BAR
 # ==========================================
-with st.sidebar:
-    st.markdown("<h3 style='color: #00d4ff;'>Flight Parameters</h3>", unsafe_allow_html=True)
-    st.write("Adjust mechanical variables to simulate drone telemetry changes:")
-    st.markdown("---")
-    
-    input_rpm = st.slider("Motor RPM", min_value=8000, max_value=18000, value=14000, step=50)
-    input_weight = st.slider("Payload Weight (kg)", min_value=0.5, max_value=8.0, value=2.5, step=0.05)
-    input_wind = st.slider("Average Wind Speed (km/h)", min_value=0.0, max_value=45.0, value=15.0, step=0.25)
+# Instantiating default metrics early to sync state variables elegantly
+if 'rpm_val' not in st.session_state: st.session_state.rpm_val = 14000
+if 'wgt_val' not in st.session_state: st.session_state.wgt_val = 2.50
+if 'wnd_val' not in st.session_state: st.session_state.wnd_val = 15.00
 
-# Calculate live estimation values based on input
-features = [[input_rpm, input_weight, input_wind]]
+features = [[st.session_state.rpm_val, st.session_state.wgt_val, st.session_state.wnd_val]]
 predicted_rate = model.predict(features)[0]
 
-# Dynamic header stats
-is_airborne = "AIRBORNE" if input_rpm > 9500 else "GROUNDED"
-badge_color = "#00d4ff" if is_airborne == "AIRBORNE" else "#ef4444"
-estimated_battery = max(0.0, min(100.0, 100.0 - (predicted_rate * 600)))
+status_str = "Airborne" if st.session_state.rpm_val > 9500 else "Grounded"
+remaining_cap = max(0.0, min(100.0, 100.0 - (predicted_rate * 600)))
 
-# ==========================================
-# MAIN PANEL NAVIGATION HEADER
-# ==========================================
-header_col1, header_col2, header_col3, header_col4 = st.columns([40, 20, 20, 20])
-
-with header_col1:
-    st.markdown("<h1 style='margin:0; padding:0;'>DRONE TELEMETRY ANALYZER</h1>", unsafe_allow_html=True)
-    st.caption("SYSTEM CORE: RANDOM FOREST REGRESSOR // DATA SINK")
-
-with header_col2:
-    st.markdown(f"""
-    <div style='text-align: center; border-left: 1px solid #1e293b;'>
-        <div style='font-size: 0.75rem; color: #64748b;'>STATUS</div>
-        <div style='font-size: 1.1rem; font-weight: bold; color: {badge_color};'>{is_airborne}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with header_col3:
-    st.markdown(f"""
-    <div style='text-align: center; border-left: 1px solid #1e293b;'>
-        <div style='font-size: 0.75rem; color: #64748b;'>EST. REMAINING CAP. (10M)</div>
-        <div style='font-size: 1.1rem; font-weight: bold; color: #38bdf8;'>{estimated_battery:.1f}%</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with header_col4:
-    st.markdown(f"""
-    <div style='text-align: center; border-left: 1px solid #1e293b;'>
-        <div style='font-size: 0.75rem; color: #64748b;'>SYS VALIDATION R²</div>
-        <div style='font-size: 1.1rem; font-weight: bold; color: #10b981;'>{validation_r2:.2f}%</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.markdown("<hr style='border: 0; border-top: 1px solid rgba(0, 212, 255, 0.2); margin-top:0.5rem; margin-bottom:1.5rem;'>", unsafe_allow_html=True)
-
-# ==========================================
-# CORE LAYOUT DATA MATRIX
-# ==========================================
-col_diag, col_charts = st.columns(2, gap="large")
-
-with col_diag:
-    st.markdown("<h3>Diagnostics Panel</h3>", unsafe_allow_html=True)
-    
-    rpm_status = ("CRIT", "status-crit") if input_rpm > 16000 else (("WARN", "status-warn") if input_rpm > 13500 else ("SAFE", "status-safe"))
-    load_status = ("CRIT", "status-crit") if input_weight > 6.0 else (("WARN", "status-warn") if input_weight > 4.0 else ("SAFE", "status-safe"))
-    wind_status = ("CRIT", "status-crit") if input_wind > 32.0 else (("WARN", "status-warn") if input_wind > 18.0 else ("SAFE", "status-safe"))
-    
-    st.markdown(f"""
-    <div style='border: 1px solid #1e293b; background: #070a14; padding: 1rem; border-radius: 4px;'>
-        <div class='hud-row'>
-            <span>[01] PROPULSION RPM LOAD PROFILE</span>
-            <span class='{rpm_status[1]}'>{rpm_status[0]}</span>
-        </div>
-        <div class='hud-row'>
-            <span>[02] STRUCTURAL PAYLOAD STRESS EXPONENT</span>
-            <span class='{load_status[1]}'>{load_status[0]}</span>
-        </div>
-        <div class='hud-row'>
-            <span>[03] ENVIRONMENTAL WIND RESISTANCE COEFFICIENT</span>
-            <span class='{wind_status[1]}'>{wind_status[0]}</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col_charts:
-    st.markdown("<h3>Prediction Results</h3>", unsafe_allow_html=True)
-    
-    gauge_color = "#10b981" if predicted_rate <= 0.040 else ("#f59e0b" if predicted_rate <= 0.060 else "#ef4444")
-    percentage_fill = min(100, max(10, int((predicted_rate / 0.1) * 100)))
-    
-    st.markdown(f"""
-    <div class='hud-container'>
-        <div style='font-size: 0.8rem; color: #64748b; margin-bottom: 0.5rem;'>PREDICTED VOLTAGE DROP RATE</div>
-        <div style='display: flex; align-items: center; justify-content: space-between;'>
-            <div class='hud-value'>{predicted_rate:.5f} V/s</div>
-            <div style='width: 120px; background: #1e293b; height: 12px; border-radius: 6px; overflow: hidden; border: 1px solid {gauge_color};'>
-                <div style='width: {percentage_fill}%; background: {gauge_color}; height: 100%; transition: width 0.5s ease-in-out;'></div>
+st.markdown(f"""
+    <div class='thin-header'>
+        <div class='header-title'>Drone Telemetry Analyzer</div>
+        <div class='header-chips'>
+            <div class='stat-chip'>
+                <span class='chip-label'>Status</span>
+                <span class='chip-value' style='color: {"#4a7c59" if status_str == "Airborne" else "#8f3f3f"};'>{status_str}</span>
+            </div>
+            <div class='v-rule'></div>
+            <div class='stat-chip'>
+                <span class='chip-label'>Est. Capacity (10m)</span>
+                <span class='chip-value' style='color: #e2e2dc;'>{remaining_cap:.1f}%</span>
+            </div>
+            <div class='v-rule'></div>
+            <div class='stat-chip'>
+                <span class='chip-label'>Validation R²</span>
+                <span class='chip-value' style='color: #e2e2dc;'>{validation_r2:.2f}%</span>
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-    # 10-Minute Sparkline Trend Plot
+# ==========================================
+# TRUE DESERIALIZED THREE COLUMN GRID MAPPING
+# ==========================================
+col_params, col_main, col_diag = st.columns([25, 50, 25], gap="medium")
+
+# --- COLUMN 1: FLIGHT PARAMETERS (LEFT) ---
+with col_params:
+    st.markdown("<div class='column-surface'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>Flight Parameters</div>", unsafe_allow_html=True)
+    
+    st.session_state.rpm_val = st.slider(
+        "Motor RPM", 
+        min_value=8000, max_value=18000, 
+        value=st.session_state.rpm_val, step=100
+    )
+    
+    st.session_state.wgt_val = st.slider(
+        "Payload Weight (kg)", 
+        min_value=0.5, max_value=8.0, 
+        value=st.session_state.wgt_val, step=0.05
+    )
+    
+    st.session_state.wnd_val = st.slider(
+        "Average Wind Speed (km/h)", 
+        min_value=0.0, max_value=45.0, 
+        value=st.session_state.wnd_val, step=0.25
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- COLUMN 2: ANALYTICAL PREDICTION ENGINE (CENTER) ---
+with col_main:
+    st.markdown("<div class='column-surface'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>Prediction Results</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.85rem; color:#6b6b5e; margin-bottom:1.5rem;'>Calculated target battery voltage degradation per second under active performance vectors.</div>", unsafe_allow_html=True)
+    
+    # Render pure top-aligned measurement values 
+    st.markdown(f"<div class='bar-value'>{predicted_rate:.5f} <span style='font-size:16px; color:#6b6b5e;'>V/s</span></div>", unsafe_allow_html=True)
+    
+    # Segmented horizontal 8px linear execution bar maps out zones
+    percentage_fill = min(100, max(5, int((predicted_rate / 0.1) * 100)))
+    st.markdown(f"""
+        <div class='segmented-container'>
+            <div class='segmented-fill' style='width: {percentage_fill}%;'></div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # --- CHART.JS MUTED SPARKLINE TREND PREVIEW ---
+    st.markdown("<div style='margin-top:2.5rem; margin-bottom:0.5rem; font-size:0.75rem; color:#6b6b5e; text-transform:uppercase;'>10-Minute Volts Degradation Trend Forecast</div>", unsafe_allow_html=True)
+    
+    # Generate linear decay values array
     time_series = np.arange(0, 601, 30)
-    initial_voltage = 22.2
-    voltage_decay = initial_voltage - (predicted_rate * time_series)
+    nominal_start_voltage = 22.20
+    decay_vector = nominal_start_voltage - (predicted_rate * time_series)
+    critical_threshold_boundary = 19.80 # 3.3V per cell safety baseline cutoff marker
     
     chart_df = pd.DataFrame({
-        'Flight Timeline (Seconds)': time_series,
-        'Estimated Pack Voltage (V)': voltage_decay
-    }).set_index('Flight Timeline (Seconds)')
+        'Timeline (Seconds)': time_series,
+        'Pack Voltage': decay_vector,
+        'Critical Threshold': [critical_threshold_boundary] * len(time_series)
+    }).set_index('Timeline (Seconds)')
     
-    st.line_chart(chart_df, height=200)
+    # Native line plot configured without fill colors or heavy bright borders
+    st.line_chart(chart_df, color=["#c8a84b", "#8f3f3f"], height=200)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# --- COLUMN 3: ACCOUNTABLE DIAGNOSTICS LOG MATRIX (RIGHT) ---
+with col_diag:
+    st.markdown("<div class='column-surface'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>Diagnostics Panel</div>", unsafe_allow_html=True)
+    
+    # Muted desaturated rules verification bounds calculations
+    rpm_class = "border-crit" if st.session_state.rpm_val > 16000 else ("border-warn" if st.session_state.rpm_val > 13500 else "border-safe")
+    rpm_txt = "Critical" if st.session_state.rpm_val > 16000 else ("Caution" if st.session_state.rpm_val > 13500 else "Nominal")
+    
+    wgt_class = "border-crit" if st.session_state.wgt_val > 6.0 else ("border-warn" if st.session_state.wgt_val > 4.0 else "border-safe")
+    wgt_txt = "Critical" if st.session_state.wgt_val > 6.0 else ("Caution" if st.session_state.wgt_val > 4.0 else "Nominal")
+    
+    wnd_class = "border-crit" if st.session_state.wnd_val > 32.0 else ("border-warn" if st.session_state.wnd_val > 18.0 else "border-safe")
+    wnd_txt = "Critical" if st.session_state.wnd_val > 32.0 else ("Caution" if st.session_state.wnd_val > 18.0 else "Nominal")
+    
+    st.markdown(f"""
+        <div class='diag-row {rpm_class}'>
+            <div class='diag-label'>Propulsion load profile</div>
+            <div class='diag-value'>{rpm_txt}</div>
+        </div>
+        <div class='diag-row {wgt_class}'>
+            <div class='diag-label'>Payload mass stress</div>
+            <div class='diag-value'>{wgt_txt}</div>
+        </div>
+        <div class='diag-row {wnd_class}'>
+            <div class='diag-label'>Wind resistance vector</div>
+            <div class='diag-value'>{wnd_txt}</div>
+        </div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# SYSTEM METADATA TERMINAL
+# RESTRAINED PLAIN SYSTEM SPECIFICATIONS
 # ==========================================
 st.markdown("<br>", unsafe_allow_html=True)
-st.markdown("---")
-st.markdown("<h3>System Metadata Terminal</h3>", unsafe_allow_html=True)
-
-st.markdown(f"""
-<div class='terminal-card'>
-    AEROCHARGE_CORE_LOG // SYSTEM_INITIALIZATION_SUCCESSFUL<br>
-    --------------------------------------------------------------------------------<br>
-    &gt; CORE_ALGORITHM_IDENTIFIER : RANDOM FOREST REGRESSOR [METRIC R²: {validation_r2:.2f}%]<br>
-    &gt; STRUCTURAL_FEATURE_VECTOR  : [01] motor_rpm // [02] package_weight_kg // [03] avg_wind_speed<br>
-    &gt; PREDICTIVE_TARGET_MATRIX  : voltage_drop_rate (SI unit output conversion: Volts/second)<br>
-    &gt; EXPERIMENTAL_TRAIN_SPLIT  : 80% MATRIX OPTIMIZATION / 20% OUT-OF-SAMPLE VALIDATION<br>
-    &gt; DATABASE_DATA_SOURCE_SINK : SQLITE_RELATIONAL_DATASET [drone_fleet.db]<br>
-    --------------------------------------------------------------------------------<br>
-    &gt; STATUS: MONITORING TELESWEEP STREAM MODULES ACTIVE...<span class='cursor'></span>
-</div>
-""", unsafe_allow_html=True)
+st.markdown("<div style='font-size:0.75rem; color:#6b6b5e; font-family:\"IBM Plex Mono\", monospace;'>[MODEL_INFO] Random Forest Regressor // Train Split: 80-20 // Active Features: motor_rpm, package_weight_kg, avg_wind_speed // Target: voltage_drop_rate</div>", unsafe_allow_html=True)
