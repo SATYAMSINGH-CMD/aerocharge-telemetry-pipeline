@@ -30,7 +30,7 @@ st.markdown("""
         font-family: 'Inter', sans-serif;
     }
     
-    /* 🚨 TEXT VISIBILITY FIX: Force all slider labels to deep slate gray */
+    /* Force all slider labels to deep slate gray */
     label, [data-testid="stWidgetLabel"] p {
         color: #1a2238 !important;
         font-family: 'IBM Plex Mono', monospace !important;
@@ -43,7 +43,7 @@ st.markdown("""
         font-family: 'IBM Plex Mono', monospace !important;
     }
     
-    /* Full-width Top Banner to match your reference image */
+    /* Full-width Top Banner */
     .hero-header {
         background-color: #1a2238;
         color: #ffffff;
@@ -127,7 +127,6 @@ DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
 
 @st.cache_resource
 def initialize_multi_model_pipeline():
-    """Extracts base flights features and trains four independent regressors."""
     np.random.seed(42)
     n_samples = 1000
     
@@ -147,9 +146,9 @@ def initialize_multi_model_pipeline():
         rpm = np.random.randint(10000, 17000, size=n_samples)
         weight = np.random.uniform(0.5, 6.0, size=n_samples)
         wind = np.random.uniform(2.0, 35.0, size=n_samples)
-        v_drop = np.random.uniform(0.015, 0.095, size=n_samples)
+        v_drop = np.random.uniform(0.001, 0.012, size=n_samples)  # Adjusted base training vector scales
 
-    # Core physical engineering formulas to construct the 3 new target vectors
+    # Relational formulas to map physical target vectors
     temp = 25.0 + (rpm * 0.003) + (weight * 4.5) + np.random.normal(0, 2, size=len(rpm))
     vib = 0.2 + (wind * 0.04) + (rpm * 0.00005) + np.random.normal(0, 0.05, size=len(rpm))
     drag = (wind ** 2) * 0.008 * (1.0 + (weight * 0.05)) + np.random.normal(0, 0.1, size=len(rpm))
@@ -162,7 +161,6 @@ def initialize_multi_model_pipeline():
     features = ['rpm', 'weight', 'wind']
     models_dict = {}
     
-    # Train separate models for every performance target metric
     for target in ['v_drop', 'temp', 'vib', 'drag']:
         X = data_payload[features]
         y = data_payload[target]
@@ -199,7 +197,10 @@ with col_input:
 
 # Calculate simultaneous multi-variable inference
 eval_vector = [[input_rpm, input_weight, input_wind]]
-pred_v = models['v_drop'].predict(eval_vector)[0]
+raw_v_pred = models['v_drop'].predict(eval_vector)[0]
+
+# Standardize output scale to real millivolts/sec bounds if data spans are over-expanded
+pred_v = raw_v_pred * 0.05 if raw_v_pred > 0.02 else raw_v_pred
 pred_t = models['temp'].predict(eval_vector)[0]
 pred_vi = models['vib'].predict(eval_vector)[0]
 pred_d = models['drag'].predict(eval_vector)[0]
@@ -209,7 +210,7 @@ with col_metrics:
     st.markdown("<h4 style='color: #1a2238; border-bottom: 2px solid #e9ecef; padding-bottom: 0.5rem; margin-bottom: 1.5rem;'>Subsystem Diagnostics</h4>", unsafe_allow_html=True)
     
     # Block 1: Battery Drop Rate
-    fill_v = min(100, max(5, int((pred_v / 0.1) * 100)))
+    fill_v = min(100, max(5, int((pred_v / 0.015) * 100)))
     st.markdown(f"""
         <div class='metric-card'>
             <div class='metric-label'>Battery Voltage Drop Rate</div>
@@ -254,9 +255,15 @@ with col_hud:
         </div>
     """, unsafe_allow_html=True)
     
-    # 10-Minute Trend Line Plot
-    st.markdown("<br>", unsafe_allow_html=True)
-    time_steps = np.arange(0, 601, 60)
-    voltage_line = 22.20 - (pred_v * time_steps)
-    chart_data = pd.DataFrame({'Timeline (s)': time_steps, 'Pack Voltage (V)': voltage_line}).set_index('Timeline (s)')
+    # Cleaned 10-Minute Trend Line Plot capped at nominal safety boundaries
+    st.markdown("<br><div style='font-size:0.75rem; font-weight:600; color:#6c757d; text-transform:uppercase;'>10-Min Voltage Decay Forecast</div>", unsafe_allow_html=True)
+    time_steps = np.arange(0, 601, 30)
+    
+    # Calculate decay vectors and clip values cleanly at absolute zero discharge limits (18.0V)
+    voltage_line = np.maximum(18.0, 22.20 - (pred_v * time_steps))
+    
+    chart_data = pd.DataFrame({
+        'Timeline (s)': time_steps, 
+        'Pack Voltage (V)': voltage_line
+    }).set_index('Timeline (s)')
     st.line_chart(chart_data, height=160)
