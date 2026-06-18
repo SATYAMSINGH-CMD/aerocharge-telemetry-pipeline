@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
 CREATE INDEX IF NOT EXISTS idx_telemetry_flight ON telemetry_logs(flight_id);
 
 -- ========================================================
--- PHASE 2: THE ANALYTICAL JOIN QUERY (Our New Code!)
+-- ANALYTICAL JOIN QUERY
 -- ========================================================
 
 SELECT 

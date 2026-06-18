@@ -1,3 +1,151 @@
+﻿# Drone Telemetry Analytics - Codebase Export
+
+This file collects the text/code files in the project so the codebase can be shared from one copy-paste friendly document.
+
+Generated on 2026-06-18.
+
+## Project Tree
+
+```text
+drone_telemetry_analytics/
+|-- README.md
+|-- requirements.txt
+|-- app.py
+|-- dashboard.py
+|-- generate_data.py
+|-- main.py
+|-- queries/
+|   `-- analytical_joins.sql
+|-- data/
+|   `-- drone_fleet.db              [binary SQLite database, not embedded]
+|-- rpm_vs_battery_depletion.png    [binary plot image, not embedded]
+`-- wind_vs_rpm_analysis.png        [binary plot image, not embedded]
+```
+
+## Files
+
+### README.md
+
+````markdown
+# Drone Telemetry Analytics
+
+A SQLite-to-Streamlit analytics project for simulated drone telemetry.
+
+The project focuses on the full data pipeline:
+
+```text
+Data generation
+-> SQLite warehouse
+-> SQL join layer
+-> exploratory telemetry analysis
+-> Random Forest voltage-drop prediction
+-> Streamlit dashboard
+```
+
+Live deployment:
+[Launch Streamlit Application Dashboard](https://aerocharge-telemetry-pipeline-bhw5fwsh9dtfgbepmmfjvp.streamlit.app/)
+
+## Database
+
+The local SQLite warehouse is stored at `data/drone_fleet.db` and contains:
+
+```text
+drones
+  -> flights
+      -> telemetry_logs
+```
+
+Core tables:
+
+- `drones`: drone model, payload capacity, battery capacity
+- `flights`: drone assignment, package weight, average wind speed
+- `telemetry_logs`: second-by-second motor RPM and voltage drop rate
+
+The analytical query is stored in `queries/analytical_joins.sql` and joins all
+three tables with `INNER JOIN`.
+
+## Machine Learning Scope
+
+The model predicts one real project target:
+
+```text
+voltage_drop_rate
+```
+
+Inputs:
+
+```text
+motor_rpm
+package_weight_kg
+avg_wind_speed
+```
+
+Model:
+
+```text
+RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)
+```
+
+Important caveat: the telemetry is simulated. The generator creates
+`voltage_drop_rate` from RPM, payload, and wind speed, so a high R2 score is
+expected. This project demonstrates a data engineering and ML workflow; it does
+not claim to discover additional measured outputs.
+
+## Dashboard Pages
+
+- Data Warehouse: row counts, schemas, table samples, and relationships
+- SQL Analytics: the project join query, joined dataset size, and filters
+- Telemetry Analysis: RPM, wind, and payload plotted against voltage drop
+- ML Predictor: predicts `voltage_drop_rate` from RPM, payload, and wind
+- Model Evaluation: train/test rows, model settings, R2, and feature importance
+
+## Run Locally
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Regenerate the SQLite database:
+
+```bash
+python generate_data.py
+```
+
+Run the dashboard:
+
+```bash
+streamlit run app.py
+```
+
+Run the analysis script:
+
+```bash
+python main.py
+```
+
+## Shareable Code Export
+
+`CODEBASE_EXPORT.md` contains the text code from the project files in one
+copy-paste friendly document. Binary assets such as the SQLite database and PNG
+plots are referenced but not embedded.
+````
+
+### requirements.txt
+
+````text
+streamlit>=1.35.0
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.2.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+````
+
+### app.py
+
+````python
 import sqlite3
 from pathlib import Path
 
@@ -530,3 +678,335 @@ elif page == "Model Evaluation":
         """,
         unsafe_allow_html=True,
     )
+````
+
+### dashboard.py
+
+````python
+"""Compatibility entry point for Streamlit Cloud or older run commands.
+
+The main dashboard lives in app.py. Running `streamlit run dashboard.py` imports
+that app so the project has one consistent analytics-first interface.
+"""
+
+import app  # noqa: F401
+````
+
+### generate_data.py
+
+````python
+import random
+import sqlite3
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
+SQL_PATH = BASE_DIR / "queries" / "analytical_joins.sql"
+
+RANDOM_SEED = 42
+FLIGHT_COUNT = 1000
+
+DRONES = [
+    {
+        "model_name": "AeroLift X1",
+        "max_payload_kg": 2.5,
+        "battery_capacity_mah": 5000,
+    },
+    {
+        "model_name": "CargoHawk Pro",
+        "max_payload_kg": 5.0,
+        "battery_capacity_mah": 8500,
+    },
+    {
+        "model_name": "SkyMule Heavy",
+        "max_payload_kg": 8.0,
+        "battery_capacity_mah": 12000,
+    },
+]
+
+
+def load_schema_sql() -> str:
+    sql_script = SQL_PATH.read_text(encoding="utf-8")
+    return sql_script.split("-- ANALYTICAL JOIN QUERY", 1)[0]
+
+
+def reset_database(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        DROP TABLE IF EXISTS telemetry_logs;
+        DROP TABLE IF EXISTS flights;
+        DROP TABLE IF EXISTS drones;
+        """
+    )
+    connection.executescript(load_schema_sql())
+
+
+def build_simulated_records() -> tuple[list[tuple], list[tuple]]:
+    flight_records = []
+    telemetry_records = []
+    telemetry_id_counter = 1
+
+    for flight_id in range(1, FLIGHT_COUNT + 1):
+        drone_id = random.randint(1, len(DRONES))
+        max_payload = DRONES[drone_id - 1]["max_payload_kg"]
+
+        package_weight_kg = round(random.uniform(0.5, max_payload), 2)
+        avg_wind_speed = round(random.uniform(0.0, 45.0), 2)
+
+        flight_records.append(
+            (
+                flight_id,
+                drone_id,
+                package_weight_kg,
+                avg_wind_speed,
+            )
+        )
+
+        base_rpm = 3000
+        weight_stress = package_weight_kg * 250
+        wind_stress = avg_wind_speed * 40
+        stable_rpm = base_rpm + weight_stress + wind_stress
+
+        # This is a transparent synthetic target for a learning project.
+        voltage_drop_rate = (stable_rpm / 3000) ** 2 * 0.05
+
+        seconds_elapsed = 0
+        battery_level = 100.0
+
+        while battery_level > 0:
+            current_rpm = int(stable_rpm + random.uniform(-50, 50))
+            battery_level = max(0.0, battery_level - voltage_drop_rate)
+
+            telemetry_records.append(
+                (
+                    telemetry_id_counter,
+                    flight_id,
+                    seconds_elapsed,
+                    round(voltage_drop_rate, 4),
+                    current_rpm,
+                )
+            )
+
+            telemetry_id_counter += 1
+            seconds_elapsed += 1
+
+    return flight_records, telemetry_records
+
+
+def main() -> None:
+    random.seed(RANDOM_SEED)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    print("Creating fresh SQLite warehouse...")
+    with sqlite3.connect(DB_PATH) as connection:
+        reset_database(connection)
+        cursor = connection.cursor()
+
+        cursor.executemany(
+            """
+            INSERT INTO drones (model_name, max_payload_kg, battery_capacity_mah)
+            VALUES (:model_name, :max_payload_kg, :battery_capacity_mah)
+            """,
+            DRONES,
+        )
+
+        print(f"Simulating {FLIGHT_COUNT:,} flights and second-by-second telemetry logs...")
+        flight_records, telemetry_records = build_simulated_records()
+
+        cursor.executemany(
+            """
+            INSERT INTO flights (flight_id, drone_id, package_weight_kg, avg_wind_speed)
+            VALUES (?, ?, ?, ?)
+            """,
+            flight_records,
+        )
+
+        cursor.executemany(
+            """
+            INSERT INTO telemetry_logs (log_id, flight_id, seconds_elapsed, voltage_drop_rate, motor_rpm)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            telemetry_records,
+        )
+
+        connection.commit()
+
+    print(f"Inserted {len(DRONES):,} drones.")
+    print(f"Inserted {len(flight_records):,} flights.")
+    print(f"Inserted {len(telemetry_records):,} telemetry logs.")
+    print(f"Database saved to {DB_PATH}.")
+
+
+if __name__ == "__main__":
+    main()
+````
+
+### main.py
+
+````python
+import sqlite3
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
+SQL_PATH = BASE_DIR / "queries" / "analytical_joins.sql"
+JOIN_MARKER = "-- ANALYTICAL JOIN QUERY"
+
+
+def load_join_query() -> str:
+    sql_script = SQL_PATH.read_text(encoding="utf-8")
+    return sql_script.split(JOIN_MARKER, 1)[1].strip()
+
+
+def load_joined_dataset() -> pd.DataFrame:
+    print("Connecting to the SQLite data warehouse...")
+    with sqlite3.connect(DB_PATH) as connection:
+        print("Running the 3-table INNER JOIN...")
+        return pd.read_sql_query(load_join_query(), connection)
+
+
+def save_eda_plots(df: pd.DataFrame) -> None:
+    print("Generating EDA plots...")
+    graph_sample = df.sample(min(2000, len(df)), random_state=42)
+
+    sns.set_theme(style="darkgrid")
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(
+        data=graph_sample,
+        x="avg_wind_speed",
+        y="motor_rpm",
+        hue="model_name",
+        palette="viridis",
+        alpha=0.8,
+    )
+    plt.title("Impact of Wind Speed on Motor RPM", fontsize=14, fontweight="bold")
+    plt.xlabel("Average Wind Speed (km/h)", fontsize=12)
+    plt.ylabel("Motor RPM", fontsize=12)
+    wind_plot_path = BASE_DIR / "wind_vs_rpm_analysis.png"
+    plt.savefig(wind_plot_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {wind_plot_path.name}")
+
+    plt.figure(figsize=(10, 6))
+    sns.regplot(
+        data=graph_sample,
+        x="motor_rpm",
+        y="voltage_drop_rate",
+        scatter_kws={"alpha": 0.3, "color": "#2a9d8f"},
+        line_kws={"color": "#e76f51", "linewidth": 3},
+    )
+    plt.title("Motor RPM vs Voltage Drop Rate", fontsize=14, fontweight="bold")
+    plt.xlabel("Motor RPM", fontsize=12)
+    plt.ylabel("Voltage Drop Rate (V/s)", fontsize=12)
+    battery_plot_path = BASE_DIR / "rpm_vs_battery_depletion.png"
+    plt.savefig(battery_plot_path, dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {battery_plot_path.name}")
+
+
+def train_voltage_drop_model(df: pd.DataFrame) -> None:
+    print("Training Random Forest model for voltage_drop_rate...")
+    features = ["motor_rpm", "package_weight_kg", "avg_wind_speed"]
+    X = df[features]
+    y = df["voltage_drop_rate"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42,
+    )
+    print(f"Training rows: {X_train.shape[0]:,}")
+    print(f"Testing rows: {X_test.shape[0]:,}")
+
+    model = RandomForestRegressor(
+        n_estimators=50,
+        max_depth=10,
+        random_state=42,
+        n_jobs=-1,
+    )
+    model.fit(X_train, y_train)
+
+    r2_score = model.score(X_test, y_test)
+    print(f"R2 score: {r2_score:.4f}")
+    print("Feature importances:")
+    for feature, importance in zip(features, model.feature_importances_):
+        print(f"  {feature}: {importance:.4f}")
+
+    print(
+        "Note: this is simulated telemetry. A high R2 score is expected because "
+        "voltage_drop_rate is generated from these same input variables."
+    )
+
+
+def main() -> None:
+    df = load_joined_dataset()
+    print(f"Loaded {df.shape[0]:,} rows and {df.shape[1]:,} columns.")
+    print("First 5 rows:")
+    print(df.head())
+
+    save_eda_plots(df)
+    train_voltage_drop_model(df)
+
+
+if __name__ == "__main__":
+    main()
+````
+
+### queries/analytical_joins.sql
+
+````sql
+-- ========================================================
+-- PHASE 1: WAREHOUSE STRUCTURAL BLUEPRINTS (Leave these here!)
+-- ========================================================
+
+CREATE TABLE IF NOT EXISTS drones (
+    drone_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_name TEXT NOT NULL,
+    max_payload_kg REAL NOT NULL,
+    battery_capacity_mah INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS flights (
+    flight_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    drone_id INTEGER,
+    package_weight_kg REAL NOT NULL,
+    avg_wind_speed REAL NOT NULL,
+    FOREIGN KEY (drone_id) REFERENCES drones (drone_id)
+);
+
+CREATE TABLE IF NOT EXISTS telemetry_logs (
+    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flight_id INTEGER,
+    seconds_elapsed INTEGER NOT NULL,
+    voltage_drop_rate REAL NOT NULL,
+    motor_rpm INTEGER NOT NULL,
+    FOREIGN KEY (flight_id) REFERENCES flights (flight_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telemetry_flight ON telemetry_logs(flight_id);
+
+-- ========================================================
+-- ANALYTICAL JOIN QUERY
+-- ========================================================
+
+SELECT 
+    telemetry_logs.log_id,
+    telemetry_logs.flight_id,
+    drones.model_name,          
+    flights.package_weight_kg,   
+    telemetry_logs.motor_rpm,
+    flights.avg_wind_speed,
+    telemetry_logs.voltage_drop_rate
+FROM telemetry_logs
+INNER JOIN flights ON telemetry_logs.flight_id = flights.flight_id
+INNER JOIN drones ON flights.drone_id = drones.drone_id;
+````
