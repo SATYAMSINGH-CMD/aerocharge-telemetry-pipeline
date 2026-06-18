@@ -187,7 +187,10 @@ def load_warehouse_metadata() -> tuple[dict[str, int], dict[str, pd.DataFrame], 
     return counts, schemas, previews
 
 
-@st.cache_data(show_spinner=False)
+DISPLAY_SAMPLE_SIZE = 50_000
+
+
+@st.cache_data(show_spinner="Loading joined dataset…")
 def load_joined_dataset() -> pd.DataFrame:
     stop_if_database_missing()
     _, analytical_query = load_sql_text()
@@ -198,7 +201,23 @@ def load_joined_dataset() -> pd.DataFrame:
     return joined
 
 
-@st.cache_resource(show_spinner=False)
+@st.cache_data(show_spinner="Loading display sample…")
+def load_display_sample() -> tuple[pd.DataFrame, int]:
+    """Load a random sample for charts and tables to keep the UI responsive."""
+    stop_if_database_missing()
+    _, analytical_query = load_sql_text()
+    sampled_query = f"SELECT * FROM ({analytical_query.rstrip(';')}) ORDER BY RANDOM() LIMIT {DISPLAY_SAMPLE_SIZE}"
+
+    with sqlite3.connect(DB_PATH) as connection:
+        total_rows = pd.read_sql_query(
+            f"SELECT COUNT(*) AS n FROM ({analytical_query.rstrip(';')})", connection
+        ).iloc[0]["n"]
+        sample = pd.read_sql_query(sampled_query, connection)
+
+    return sample, int(total_rows)
+
+
+@st.cache_resource(show_spinner="Training model…")
 def train_flight_time_model() -> dict[str, object]:
     joined = load_joined_dataset()
 
@@ -221,12 +240,26 @@ def train_flight_time_model() -> dict[str, object]:
         }
     ).sort_values("importance", ascending=False)
 
+    # Store slider ranges so the predictor page doesn't need to reload data.
+    slider_ranges = {}
+    for col in FEATURE_COLUMNS:
+        slider_ranges[col] = {
+            "min": joined[col].min(),
+            "max": joined[col].max(),
+            "median": joined[col].median(),
+        }
+    slider_ranges["battery_capacity_mah"]["options"] = sorted(
+        joined["battery_capacity_mah"].unique().tolist()
+    )
+
     return {
         "model": model,
         "r2_score": model.score(X_test, y_test),
         "train_rows": len(X_train),
         "test_rows": len(X_test),
+        "total_rows": len(joined),
         "importances": importances,
+        "slider_ranges": slider_ranges,
     }
 
 
@@ -326,7 +359,7 @@ with tab_warehouse:
     show_table_preview_tabs(previews)
 
 with tab_sql:
-    joined_df = load_joined_dataset()
+    display_df, total_joined_rows = load_display_sample()
     full_sql, analytical_query = load_sql_text()
 
     page_header(
@@ -339,23 +372,23 @@ with tab_sql:
 
     j1, j2, j3 = st.columns(3)
     with j1:
-        metric_tile("Joined Rows", f"{len(joined_df):,}")
+        metric_tile("Joined Rows", f"{total_joined_rows:,}")
     with j2:
-        metric_tile("Joined Columns", f"{joined_df.shape[1]:,}")
+        metric_tile("Joined Columns", f"{display_df.shape[1]:,}")
     with j3:
         metric_tile("Source Tables", "3", "drones + flights + telemetry_logs")
 
     st.subheader("Joined Dataset Sample")
-    st.dataframe(joined_df.head(200), use_container_width=True, hide_index=True)
+    st.dataframe(display_df.head(200), use_container_width=True, hide_index=True)
 
     st.subheader("Filtering Examples")
-    models = sorted(joined_df["model_name"].unique().tolist())
+    models = sorted(display_df["model_name"].unique().tolist())
     selected_models = st.multiselect("Drone models", models, default=models)
 
-    payload_min = float(joined_df["package_weight_kg"].min())
-    payload_max = float(joined_df["package_weight_kg"].max())
-    wind_min = float(joined_df["avg_wind_speed"].min())
-    wind_max = float(joined_df["avg_wind_speed"].max())
+    payload_min = float(display_df["package_weight_kg"].min())
+    payload_max = float(display_df["package_weight_kg"].max())
+    wind_min = float(display_df["avg_wind_speed"].min())
+    wind_max = float(display_df["avg_wind_speed"].max())
 
     f1, f2 = st.columns(2)
     with f1:
@@ -375,23 +408,23 @@ with tab_sql:
             step=0.5,
         )
 
-    filtered = joined_df[
-        joined_df["model_name"].isin(selected_models)
-        & joined_df["package_weight_kg"].between(payload_range[0], payload_range[1])
-        & joined_df["avg_wind_speed"].between(wind_range[0], wind_range[1])
+    filtered = display_df[
+        display_df["model_name"].isin(selected_models)
+        & display_df["package_weight_kg"].between(payload_range[0], payload_range[1])
+        & display_df["avg_wind_speed"].between(wind_range[0], wind_range[1])
     ]
 
-    metric_tile("Filtered Rows", f"{len(filtered):,}", "preview limited to 200 rows")
+    metric_tile("Filtered Rows", f"{len(filtered):,}", f"from {DISPLAY_SAMPLE_SIZE:,} row sample")
     st.dataframe(filtered.head(200), use_container_width=True, hide_index=True)
 
 with tab_analysis:
-    joined_df = load_joined_dataset()
+    display_df, _ = load_display_sample()
     page_header(
         "Telemetry Analysis",
         "Exploratory plots using real voltage-drop and flight-time columns from the joined SQLite dataset.",
     )
 
-    chart_df = sampled_chart_data(joined_df)
+    chart_df = sampled_chart_data(display_df)
 
     st.subheader("Voltage Drop Drivers")
     p1, p2, p3 = st.columns(3)
@@ -439,7 +472,7 @@ with tab_analysis:
 
     st.subheader("Correlation With Estimated Flight Time")
     corr = (
-        joined_df[FEATURE_COLUMNS + [TARGET_COLUMN]]
+        display_df[FEATURE_COLUMNS + [TARGET_COLUMN]]
         .corr(numeric_only=True)[[TARGET_COLUMN]]
         .drop(index=TARGET_COLUMN)
         .rename(columns={TARGET_COLUMN: "correlation_with_flight_time"})
@@ -454,14 +487,13 @@ with tab_analysis:
         ("package_weight_kg", "Payload Weight", h3),
         ("battery_capacity_mah", "Battery Capacity", h4),
     ]:
-        counts_array, bin_edges = np.histogram(joined_df[column_name], bins=20)
+        counts_array, bin_edges = np.histogram(display_df[column_name], bins=20)
         hist_df = pd.DataFrame({"bin": bin_edges[:-1], "count": counts_array}).set_index("bin")
         with target_column:
             st.caption(label)
             st.bar_chart(hist_df, height=220, use_container_width=True)
 
 with tab_predictor:
-    joined_df = load_joined_dataset()
     page_header(
         "ML Predictor",
         "Random Forest inference for estimated remaining flight time.",
@@ -469,6 +501,7 @@ with tab_predictor:
 
     model_info = train_flight_time_model()
     model = model_info["model"]
+    sr = model_info["slider_ranges"]
 
     d1, d2 = st.columns([1, 1.4], gap="large")
 
@@ -476,29 +509,29 @@ with tab_predictor:
         st.subheader("Inputs")
         rpm_value = st.slider(
             "RPM",
-            min_value=int(joined_df["motor_rpm"].min()),
-            max_value=int(joined_df["motor_rpm"].max()),
-            value=int(joined_df["motor_rpm"].median()),
+            min_value=int(sr["motor_rpm"]["min"]),
+            max_value=int(sr["motor_rpm"]["max"]),
+            value=int(sr["motor_rpm"]["median"]),
             step=25,
         )
         payload_value = st.slider(
             "Payload (kg)",
-            min_value=float(joined_df["package_weight_kg"].min()),
-            max_value=float(joined_df["package_weight_kg"].max()),
-            value=float(joined_df["package_weight_kg"].median()),
+            min_value=float(sr["package_weight_kg"]["min"]),
+            max_value=float(sr["package_weight_kg"]["max"]),
+            value=float(sr["package_weight_kg"]["median"]),
             step=0.1,
         )
         wind_value = st.slider(
             "Wind Speed (km/h)",
-            min_value=float(joined_df["avg_wind_speed"].min()),
-            max_value=float(joined_df["avg_wind_speed"].max()),
-            value=float(joined_df["avg_wind_speed"].median()),
+            min_value=float(sr["avg_wind_speed"]["min"]),
+            max_value=float(sr["avg_wind_speed"]["max"]),
+            value=float(sr["avg_wind_speed"]["median"]),
             step=0.5,
         )
         battery_value = st.select_slider(
             "Battery Capacity (mAh)",
-            options=sorted(joined_df["battery_capacity_mah"].unique().tolist()),
-            value=int(joined_df["battery_capacity_mah"].median()),
+            options=sr["battery_capacity_mah"]["options"],
+            value=int(sr["battery_capacity_mah"]["median"]),
         )
 
     prediction_row = pd.DataFrame(
