@@ -279,19 +279,19 @@ def show_table_preview_tabs(previews: dict[str, pd.DataFrame]) -> None:
 stop_if_database_missing()
 counts, schemas, previews = load_warehouse_metadata()
 
-st.sidebar.title("Drone Telemetry")
-page = st.sidebar.radio(
-    "Navigation",
+st.markdown("## Drone Telemetry Analytics")
+
+tab_warehouse, tab_sql, tab_analysis, tab_predictor, tab_evaluation = st.tabs(
     [
-        "Data Warehouse",
-        "SQL Analytics",
-        "Telemetry Analysis",
-        "ML Predictor",
-        "Model Evaluation",
-    ],
+        "📦 Data Warehouse",
+        "🔗 SQL Analytics",
+        "📊 Telemetry Analysis",
+        "🚁 ML Predictor",
+        "📈 Model Evaluation",
+    ]
 )
 
-if page == "Data Warehouse":
+with tab_warehouse:
     page_header(
         "Data Warehouse",
         "SQLite tables, row counts, schema, and the real relationship chain used by the project.",
@@ -325,7 +325,7 @@ if page == "Data Warehouse":
     st.subheader("Table Samples")
     show_table_preview_tabs(previews)
 
-elif page == "SQL Analytics":
+with tab_sql:
     joined_df = load_joined_dataset()
     full_sql, analytical_query = load_sql_text()
 
@@ -384,7 +384,7 @@ elif page == "SQL Analytics":
     metric_tile("Filtered Rows", f"{len(filtered):,}", "preview limited to 200 rows")
     st.dataframe(filtered.head(200), use_container_width=True, hide_index=True)
 
-elif page == "Telemetry Analysis":
+with tab_analysis:
     joined_df = load_joined_dataset()
     page_header(
         "Telemetry Analysis",
@@ -460,7 +460,7 @@ elif page == "Telemetry Analysis":
             st.caption(label)
             st.bar_chart(hist_df, height=220, use_container_width=True)
 
-elif page == "ML Predictor":
+with tab_predictor:
     joined_df = load_joined_dataset()
     page_header(
         "ML Predictor",
@@ -513,7 +513,7 @@ elif page == "ML Predictor":
         st.caption("Estimate assumes a full battery under the selected operating profile.")
         st.dataframe(prediction_row, use_container_width=True, hide_index=True)
 
-elif page == "Model Evaluation":
+with tab_evaluation:
     page_header(
         "Model Evaluation",
         "Training footprint, test split, Random Forest settings, R2 score, and feature importances.",
