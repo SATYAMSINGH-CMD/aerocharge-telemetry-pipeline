@@ -65,11 +65,11 @@ def save_eda_plots(df: pd.DataFrame) -> None:
     print(f"Saved {battery_plot_path.name}")
 
 
-def train_voltage_drop_model(df: pd.DataFrame) -> None:
-    print("Training Random Forest model for voltage_drop_rate...")
-    features = ["motor_rpm", "package_weight_kg", "avg_wind_speed"]
+def train_flight_time_model(df: pd.DataFrame) -> None:
+    print("Training Random Forest model for estimated_flight_time_minutes...")
+    features = ["motor_rpm", "package_weight_kg", "avg_wind_speed", "battery_capacity_mah"]
     X = df[features]
-    y = df["voltage_drop_rate"]
+    y = df["estimated_flight_time_minutes"]
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -94,9 +94,10 @@ def train_voltage_drop_model(df: pd.DataFrame) -> None:
     for feature, importance in zip(features, model.feature_importances_):
         print(f"  {feature}: {importance:.4f}")
 
+    print("Target: estimated_flight_time_minutes")
     print(
         "Note: this is simulated telemetry. A high R2 score is expected because "
-        "voltage_drop_rate is generated from these same input variables."
+        "flight time is generated from battery drain and these same input variables."
     )
 
 
@@ -107,7 +108,7 @@ def main() -> None:
     print(df.head())
 
     save_eda_plots(df)
-    train_voltage_drop_model(df)
+    train_flight_time_model(df)
 
 
 if __name__ == "__main__":

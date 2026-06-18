@@ -38,7 +38,7 @@ Data generation
 -> SQLite warehouse
 -> SQL join layer
 -> exploratory telemetry analysis
--> Random Forest voltage-drop prediction
+-> Random Forest flight-time prediction
 -> Streamlit dashboard
 ```
 
@@ -59,17 +59,17 @@ Core tables:
 
 - `drones`: drone model, payload capacity, battery capacity
 - `flights`: drone assignment, package weight, average wind speed
-- `telemetry_logs`: second-by-second motor RPM and voltage drop rate
+- `telemetry_logs`: second-by-second motor RPM, voltage drop rate, and estimated flight time
 
 The analytical query is stored in `queries/analytical_joins.sql` and joins all
 three tables with `INNER JOIN`.
 
 ## Machine Learning Scope
 
-The model predicts one real project target:
+The model predicts one generated project target:
 
 ```text
-voltage_drop_rate
+estimated_flight_time_minutes
 ```
 
 Inputs:
@@ -78,6 +78,7 @@ Inputs:
 motor_rpm
 package_weight_kg
 avg_wind_speed
+battery_capacity_mah
 ```
 
 Model:
@@ -87,16 +88,17 @@ RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)
 ```
 
 Important caveat: the telemetry is simulated. The generator creates
-`voltage_drop_rate` from RPM, payload, and wind speed, so a high R2 score is
-expected. This project demonstrates a data engineering and ML workflow; it does
-not claim to discover additional measured outputs.
+`estimated_flight_time_minutes` from battery drain, RPM, payload, wind speed,
+and battery capacity, so a high R2 score is expected. This project demonstrates
+a data engineering and ML workflow; it does not claim to discover additional
+measured outputs.
 
 ## Dashboard Pages
 
 - Data Warehouse: row counts, schemas, table samples, and relationships
 - SQL Analytics: the project join query, joined dataset size, and filters
 - Telemetry Analysis: RPM, wind, and payload plotted against voltage drop
-- ML Predictor: predicts `voltage_drop_rate` from RPM, payload, and wind
+- ML Predictor: predicts remaining flight time from RPM, payload, wind, and battery capacity
 - Model Evaluation: train/test rows, model settings, R2, and feature importance
 
 ## Run Locally
@@ -161,8 +163,9 @@ DB_PATH = BASE_DIR / "data" / "drone_fleet.db"
 SQL_PATH = BASE_DIR / "queries" / "analytical_joins.sql"
 
 TABLES = ["drones", "flights", "telemetry_logs"]
-FEATURE_COLUMNS = ["motor_rpm", "package_weight_kg", "avg_wind_speed"]
-TARGET_COLUMN = "voltage_drop_rate"
+FEATURE_COLUMNS = ["motor_rpm", "package_weight_kg", "avg_wind_speed", "battery_capacity_mah"]
+FEATURE_LABELS = ["Motor RPM", "Payload Weight", "Average Wind Speed", "Battery Capacity"]
+TARGET_COLUMN = "estimated_flight_time_minutes"
 MODEL_PARAMS = {
     "n_estimators": 50,
     "max_depth": 10,
@@ -346,7 +349,7 @@ def load_joined_dataset() -> pd.DataFrame:
 
 
 @st.cache_resource(show_spinner=False)
-def train_voltage_model() -> dict[str, object]:
+def train_flight_time_model() -> dict[str, object]:
     joined = load_joined_dataset()
 
     X = joined[FEATURE_COLUMNS]
@@ -363,7 +366,7 @@ def train_voltage_model() -> dict[str, object]:
 
     importances = pd.DataFrame(
         {
-            "feature": ["Motor RPM", "Payload Weight", "Average Wind Speed"],
+            "feature": FEATURE_LABELS,
             "importance": model.feature_importances_,
         }
     ).sort_values("importance", ascending=False)
@@ -425,7 +428,6 @@ def show_table_preview_tabs(previews: dict[str, pd.DataFrame]) -> None:
 
 stop_if_database_missing()
 counts, schemas, previews = load_warehouse_metadata()
-joined_df = load_joined_dataset()
 
 st.sidebar.title("Drone Telemetry")
 page = st.sidebar.radio(
@@ -474,6 +476,7 @@ if page == "Data Warehouse":
     show_table_preview_tabs(previews)
 
 elif page == "SQL Analytics":
+    joined_df = load_joined_dataset()
     full_sql, analytical_query = load_sql_text()
 
     page_header(
@@ -532,9 +535,10 @@ elif page == "SQL Analytics":
     st.dataframe(filtered.head(200), use_container_width=True, hide_index=True)
 
 elif page == "Telemetry Analysis":
+    joined_df = load_joined_dataset()
     page_header(
         "Telemetry Analysis",
-        "Exploratory plots using real columns from the joined SQLite dataset.",
+        "Exploratory plots using real voltage-drop and flight-time columns from the joined SQLite dataset.",
     )
 
     chart_df = sampled_chart_data(joined_df)
@@ -545,7 +549,7 @@ elif page == "Telemetry Analysis":
         st.scatter_chart(
             chart_df,
             x="motor_rpm",
-            y=TARGET_COLUMN,
+            y="voltage_drop_rate",
             height=280,
             use_container_width=True,
         )
@@ -553,7 +557,7 @@ elif page == "Telemetry Analysis":
         st.scatter_chart(
             chart_df,
             x="avg_wind_speed",
-            y=TARGET_COLUMN,
+            y="voltage_drop_rate",
             height=280,
             use_container_width=True,
         )
@@ -561,26 +565,44 @@ elif page == "Telemetry Analysis":
         st.scatter_chart(
             chart_df,
             x="package_weight_kg",
-            y=TARGET_COLUMN,
+            y="voltage_drop_rate",
             height=280,
             use_container_width=True,
         )
 
-    st.subheader("Correlation With Voltage Drop Rate")
+    st.subheader("Estimated Flight Time Drivers")
+    f1, f2, f3, f4 = st.columns(4)
+    for column_name, target_column in [
+        ("motor_rpm", f1),
+        ("package_weight_kg", f2),
+        ("avg_wind_speed", f3),
+        ("battery_capacity_mah", f4),
+    ]:
+        with target_column:
+            st.scatter_chart(
+                chart_df,
+                x=column_name,
+                y=TARGET_COLUMN,
+                height=230,
+                use_container_width=True,
+            )
+
+    st.subheader("Correlation With Estimated Flight Time")
     corr = (
         joined_df[FEATURE_COLUMNS + [TARGET_COLUMN]]
         .corr(numeric_only=True)[[TARGET_COLUMN]]
         .drop(index=TARGET_COLUMN)
-        .rename(columns={TARGET_COLUMN: "correlation"})
+        .rename(columns={TARGET_COLUMN: "correlation_with_flight_time"})
     )
     st.dataframe(corr, use_container_width=True)
 
     st.subheader("Telemetry Distributions")
-    h1, h2, h3 = st.columns(3)
+    h1, h2, h3, h4 = st.columns(4)
     for column_name, label, target_column in [
         ("motor_rpm", "Motor RPM", h1),
         ("avg_wind_speed", "Wind Speed", h2),
         ("package_weight_kg", "Payload Weight", h3),
+        ("battery_capacity_mah", "Battery Capacity", h4),
     ]:
         counts_array, bin_edges = np.histogram(joined_df[column_name], bins=20)
         hist_df = pd.DataFrame({"bin": bin_edges[:-1], "count": counts_array}).set_index("bin")
@@ -589,12 +611,13 @@ elif page == "Telemetry Analysis":
             st.bar_chart(hist_df, height=220, use_container_width=True)
 
 elif page == "ML Predictor":
+    joined_df = load_joined_dataset()
     page_header(
         "ML Predictor",
-        "Random Forest inference for one target only: predicted voltage_drop_rate.",
+        "Random Forest inference for estimated remaining flight time.",
     )
 
-    model_info = train_voltage_model()
+    model_info = train_flight_time_model()
     model = model_info["model"]
 
     d1, d2 = st.columns([1, 1.4], gap="large")
@@ -622,16 +645,22 @@ elif page == "ML Predictor":
             value=float(joined_df["avg_wind_speed"].median()),
             step=0.5,
         )
+        battery_value = st.select_slider(
+            "Battery Capacity (mAh)",
+            options=sorted(joined_df["battery_capacity_mah"].unique().tolist()),
+            value=int(joined_df["battery_capacity_mah"].median()),
+        )
 
     prediction_row = pd.DataFrame(
-        [[rpm_value, payload_value, wind_value]],
+        [[rpm_value, payload_value, wind_value, battery_value]],
         columns=FEATURE_COLUMNS,
     )
     prediction = model.predict(prediction_row)[0]
 
     with d2:
         st.subheader("Prediction")
-        st.metric("Predicted Voltage Drop Rate", f"{prediction:.4f} V/s")
+        st.metric("Predicted Remaining Flight Time", f"{prediction:.1f} minutes")
+        st.caption("Estimate assumes a full battery under the selected operating profile.")
         st.dataframe(prediction_row, use_container_width=True, hide_index=True)
 
 elif page == "Model Evaluation":
@@ -640,7 +669,7 @@ elif page == "Model Evaluation":
         "Training footprint, test split, Random Forest settings, R2 score, and feature importances.",
     )
 
-    model_info = train_voltage_model()
+    model_info = train_flight_time_model()
 
     e1, e2, e3, e4, e5 = st.columns(5)
     with e1:
@@ -669,11 +698,10 @@ elif page == "Model Evaluation":
     st.markdown(
         """
         <div class="note">
-            This project uses simulated telemetry. The target column <code>voltage_drop_rate</code>
-            is generated from the same drivers used for training: <code>motor_rpm</code>,
-            <code>package_weight_kg</code>, and <code>avg_wind_speed</code>. A high R2 score is
-            expected here; it shows the model learned the synthetic generator relationship,
-            not that it discovered hidden physical outputs.
+            This project uses simulated telemetry. The target column
+            <code>estimated_flight_time_minutes</code> is generated from battery drain,
+            motor load, payload, wind speed, and battery capacity. A high R2 score is
+            expected here; it shows the model learned the synthetic generator relationship.
         </div>
         """,
         unsafe_allow_html=True,
@@ -767,9 +795,12 @@ def build_simulated_records() -> tuple[list[tuple], list[tuple]]:
         weight_stress = package_weight_kg * 250
         wind_stress = avg_wind_speed * 40
         stable_rpm = base_rpm + weight_stress + wind_stress
+        battery_capacity_mah = DRONES[drone_id - 1]["battery_capacity_mah"]
+        capacity_factor = battery_capacity_mah / 5000
 
         # This is a transparent synthetic target for a learning project.
-        voltage_drop_rate = (stable_rpm / 3000) ** 2 * 0.05
+        voltage_drop_rate = ((stable_rpm / 3000) ** 2 * 0.05) / capacity_factor
+        estimated_flight_time_minutes = 100 / voltage_drop_rate / 60
 
         seconds_elapsed = 0
         battery_level = 100.0
@@ -784,6 +815,7 @@ def build_simulated_records() -> tuple[list[tuple], list[tuple]]:
                     flight_id,
                     seconds_elapsed,
                     round(voltage_drop_rate, 4),
+                    round(estimated_flight_time_minutes, 2),
                     current_rpm,
                 )
             )
@@ -824,8 +856,15 @@ def main() -> None:
 
         cursor.executemany(
             """
-            INSERT INTO telemetry_logs (log_id, flight_id, seconds_elapsed, voltage_drop_rate, motor_rpm)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO telemetry_logs (
+                log_id,
+                flight_id,
+                seconds_elapsed,
+                voltage_drop_rate,
+                estimated_flight_time_minutes,
+                motor_rpm
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             telemetry_records,
         )
@@ -912,11 +951,11 @@ def save_eda_plots(df: pd.DataFrame) -> None:
     print(f"Saved {battery_plot_path.name}")
 
 
-def train_voltage_drop_model(df: pd.DataFrame) -> None:
-    print("Training Random Forest model for voltage_drop_rate...")
-    features = ["motor_rpm", "package_weight_kg", "avg_wind_speed"]
+def train_flight_time_model(df: pd.DataFrame) -> None:
+    print("Training Random Forest model for estimated_flight_time_minutes...")
+    features = ["motor_rpm", "package_weight_kg", "avg_wind_speed", "battery_capacity_mah"]
     X = df[features]
-    y = df["voltage_drop_rate"]
+    y = df["estimated_flight_time_minutes"]
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -941,9 +980,10 @@ def train_voltage_drop_model(df: pd.DataFrame) -> None:
     for feature, importance in zip(features, model.feature_importances_):
         print(f"  {feature}: {importance:.4f}")
 
+    print("Target: estimated_flight_time_minutes")
     print(
         "Note: this is simulated telemetry. A high R2 score is expected because "
-        "voltage_drop_rate is generated from these same input variables."
+        "flight time is generated from battery drain and these same input variables."
     )
 
 
@@ -954,7 +994,7 @@ def main() -> None:
     print(df.head())
 
     save_eda_plots(df)
-    train_voltage_drop_model(df)
+    train_flight_time_model(df)
 
 
 if __name__ == "__main__":
@@ -988,6 +1028,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     flight_id INTEGER,
     seconds_elapsed INTEGER NOT NULL,
     voltage_drop_rate REAL NOT NULL,
+    estimated_flight_time_minutes REAL NOT NULL,
     motor_rpm INTEGER NOT NULL,
     FOREIGN KEY (flight_id) REFERENCES flights (flight_id)
 );
@@ -1001,11 +1042,13 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_flight ON telemetry_logs(flight_id);
 SELECT 
     telemetry_logs.log_id,
     telemetry_logs.flight_id,
-    drones.model_name,          
+    drones.model_name,
+    drones.battery_capacity_mah,
     flights.package_weight_kg,   
     telemetry_logs.motor_rpm,
     flights.avg_wind_speed,
-    telemetry_logs.voltage_drop_rate
+    telemetry_logs.voltage_drop_rate,
+    telemetry_logs.estimated_flight_time_minutes
 FROM telemetry_logs
 INNER JOIN flights ON telemetry_logs.flight_id = flights.flight_id
 INNER JOIN drones ON flights.drone_id = drones.drone_id;

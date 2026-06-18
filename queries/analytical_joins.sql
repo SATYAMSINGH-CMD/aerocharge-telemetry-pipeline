@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
     flight_id INTEGER,
     seconds_elapsed INTEGER NOT NULL,
     voltage_drop_rate REAL NOT NULL,
+    estimated_flight_time_minutes REAL NOT NULL,
     motor_rpm INTEGER NOT NULL,
     FOREIGN KEY (flight_id) REFERENCES flights (flight_id)
 );
@@ -35,11 +36,13 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_flight ON telemetry_logs(flight_id);
 SELECT 
     telemetry_logs.log_id,
     telemetry_logs.flight_id,
-    drones.model_name,          
+    drones.model_name,
+    drones.battery_capacity_mah,
     flights.package_weight_kg,   
     telemetry_logs.motor_rpm,
     flights.avg_wind_speed,
-    telemetry_logs.voltage_drop_rate
+    telemetry_logs.voltage_drop_rate,
+    telemetry_logs.estimated_flight_time_minutes
 FROM telemetry_logs
 INNER JOIN flights ON telemetry_logs.flight_id = flights.flight_id
 INNER JOIN drones ON flights.drone_id = drones.drone_id;

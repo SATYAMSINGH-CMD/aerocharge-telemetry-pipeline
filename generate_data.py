@@ -70,9 +70,12 @@ def build_simulated_records() -> tuple[list[tuple], list[tuple]]:
         weight_stress = package_weight_kg * 250
         wind_stress = avg_wind_speed * 40
         stable_rpm = base_rpm + weight_stress + wind_stress
+        battery_capacity_mah = DRONES[drone_id - 1]["battery_capacity_mah"]
+        capacity_factor = battery_capacity_mah / 5000
 
         # This is a transparent synthetic target for a learning project.
-        voltage_drop_rate = (stable_rpm / 3000) ** 2 * 0.05
+        voltage_drop_rate = ((stable_rpm / 3000) ** 2 * 0.05) / capacity_factor
+        estimated_flight_time_minutes = 100 / voltage_drop_rate / 60
 
         seconds_elapsed = 0
         battery_level = 100.0
@@ -87,6 +90,7 @@ def build_simulated_records() -> tuple[list[tuple], list[tuple]]:
                     flight_id,
                     seconds_elapsed,
                     round(voltage_drop_rate, 4),
+                    round(estimated_flight_time_minutes, 2),
                     current_rpm,
                 )
             )
@@ -127,8 +131,15 @@ def main() -> None:
 
         cursor.executemany(
             """
-            INSERT INTO telemetry_logs (log_id, flight_id, seconds_elapsed, voltage_drop_rate, motor_rpm)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO telemetry_logs (
+                log_id,
+                flight_id,
+                seconds_elapsed,
+                voltage_drop_rate,
+                estimated_flight_time_minutes,
+                motor_rpm
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             telemetry_records,
         )

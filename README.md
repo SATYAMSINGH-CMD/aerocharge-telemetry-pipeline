@@ -9,7 +9,7 @@ Data generation
 -> SQLite warehouse
 -> SQL join layer
 -> exploratory telemetry analysis
--> Random Forest voltage-drop prediction
+-> Random Forest flight-time prediction
 -> Streamlit dashboard
 ```
 
@@ -30,17 +30,17 @@ Core tables:
 
 - `drones`: drone model, payload capacity, battery capacity
 - `flights`: drone assignment, package weight, average wind speed
-- `telemetry_logs`: second-by-second motor RPM and voltage drop rate
+- `telemetry_logs`: second-by-second motor RPM, voltage drop rate, and estimated flight time
 
 The analytical query is stored in `queries/analytical_joins.sql` and joins all
 three tables with `INNER JOIN`.
 
 ## Machine Learning Scope
 
-The model predicts one real project target:
+The model predicts one generated project target:
 
 ```text
-voltage_drop_rate
+estimated_flight_time_minutes
 ```
 
 Inputs:
@@ -49,6 +49,7 @@ Inputs:
 motor_rpm
 package_weight_kg
 avg_wind_speed
+battery_capacity_mah
 ```
 
 Model:
@@ -58,16 +59,17 @@ RandomForestRegressor(n_estimators=50, max_depth=10, random_state=42)
 ```
 
 Important caveat: the telemetry is simulated. The generator creates
-`voltage_drop_rate` from RPM, payload, and wind speed, so a high R2 score is
-expected. This project demonstrates a data engineering and ML workflow; it does
-not claim to discover additional measured outputs.
+`estimated_flight_time_minutes` from battery drain, RPM, payload, wind speed,
+and battery capacity, so a high R2 score is expected. This project demonstrates
+a data engineering and ML workflow; it does not claim to discover additional
+measured outputs.
 
 ## Dashboard Pages
 
 - Data Warehouse: row counts, schemas, table samples, and relationships
 - SQL Analytics: the project join query, joined dataset size, and filters
 - Telemetry Analysis: RPM, wind, and payload plotted against voltage drop
-- ML Predictor: predicts `voltage_drop_rate` from RPM, payload, and wind
+- ML Predictor: predicts remaining flight time from RPM, payload, wind, and battery capacity
 - Model Evaluation: train/test rows, model settings, R2, and feature importance
 
 ## Run Locally
